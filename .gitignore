@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Rider profile and local data (never commit a personal profile)
+.route-planner/
+*rider-profile.json
+
+# Generated routes
+*.gpx
+!examples/*.gpx
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Build artefacts
+dist/
