@@ -19,6 +19,9 @@ import route  # noqa: E402
 import profile as profile_mod  # noqa: E402
 import geo  # noqa: E402
 import water_route  # noqa: E402
+import optimize_stops  # noqa: E402
+import itertools  # noqa: E402
+import random  # noqa: E402
 
 
 class TestGpx(unittest.TestCase):
@@ -188,6 +191,50 @@ class TestWaterRoute(unittest.TestCase):
     def test_parse_points_needs_two(self):
         with self.assertRaises(ValueError):
             water_route.parse_points("50.80,-0.40")
+
+
+class TestOptimizeStops(unittest.TestCase):
+    def test_parse_stops(self):
+        stops = optimize_stops.parse_stops("51.5,-0.1,Cafe A; 51.6,-0.2")
+        self.assertEqual(stops[0]["name"], "Cafe A")
+        self.assertEqual(stops[1]["name"], "Stop 2")
+        self.assertEqual(stops[0]["lat"], 51.5)
+
+    def test_parse_stops_needs_two(self):
+        with self.assertRaises(ValueError):
+            optimize_stops.parse_stops("51.5,-0.1,Only")
+
+    def test_start_and_end_pinned(self):
+        stops = optimize_stops.parse_stops(
+            "0,0,A; 0,1,B; 0,2,C; 0,3,D")
+        res = optimize_stops.optimize(stops, start_index=0, end_index=3)
+        self.assertEqual(res["order"][0], "A")
+        self.assertEqual(res["order"][-1], "D")
+
+    def test_round_trip_points_close_loop(self):
+        stops = optimize_stops.parse_stops("0,0,A; 0,1,B; 1,0,C")
+        res = optimize_stops.optimize(stops, round_trip=True)
+        first = f"{stops[0]['lat']},{stops[0]['lon']}"
+        self.assertTrue(res["points"].strip().endswith(first))
+
+    def test_points_string_feeds_route_parser(self):
+        # The emitted points string must parse back via route.parse_points.
+        stops = optimize_stops.parse_stops("51.5,-0.1,A; 51.6,-0.2,B; 51.7,-0.3,C")
+        res = optimize_stops.optimize(stops)
+        parsed = route.parse_points(res["points"])
+        self.assertEqual(len(parsed), 3)
+
+    def test_exact_matches_brute_force(self):
+        random.seed(11)
+        for round_trip in (False, True):
+            for _ in range(30):
+                stops = [{"lat": random.uniform(-1, 1), "lon": random.uniform(-1, 1),
+                          "name": str(i)} for i in range(7)]
+                dist = optimize_stops.build_matrix(stops)
+                best = min(optimize_stops.route_length([0] + list(p), dist, round_trip)
+                           for p in itertools.permutations(range(1, 7)))
+                got = optimize_stops.optimize(stops, start_index=0, round_trip=round_trip)
+                self.assertLessEqual(got["total_km"], best + 1e-3)
 
 
 if __name__ == "__main__":
