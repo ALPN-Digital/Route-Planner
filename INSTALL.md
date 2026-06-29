@@ -1,7 +1,6 @@
 # Install
 
-> Replace `ALPN-Digital` below with your GitHub username once the repo is pushed.
-> Repo URL: `https://github.com/ALPN-Digital/Route-Planner`
+> Repo: `https://github.com/ALPN-Digital/Route-Planner` (if you forked it, swap in your own URL below).
 
 The skill source is the `route-planner/` folder (its `SKILL.md` is at `route-planner/SKILL.md`). A prebuilt `route-planner.skill` bundle is in the repo root for upload-based installs.
 
