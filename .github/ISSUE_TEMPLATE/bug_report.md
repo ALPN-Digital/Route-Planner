@@ -9,8 +9,8 @@ labels: bug
 A clear description of the bug.
 
 **Steps to reproduce**
-1. Command run (e.g. `python3 scripts/optimize_route.py ...`)
-2. Input data (a small `stops` sample if possible)
+1. What you asked Claude (or the script command you ran, e.g. `python3 scripts/route.py ...`)
+2. Activity / location / inputs involved
 3. What you expected vs. what you got
 
 **Environment**

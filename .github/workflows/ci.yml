@@ -17,11 +17,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Run tests (standard library only)
+      - name: Compile all scripts (stdlib only, no dependencies)
+        run: python -m compileall -q route-planner/scripts
+      - name: Run the offline test suite
         working-directory: route-planner
         run: python -m unittest discover -s tests -v
-      - name: Smoke-test the CLI
+      - name: GPX writer self-test
         working-directory: route-planner
-        run: |
-          python scripts/optimize_route.py examples/stops.example.json --start Warehouse --round-trip
-          python scripts/optimize_route.py examples/stops.example.json --json-out > /dev/null
+        run: python scripts/gpx.py
+      - name: Validate the bundled example GPX is well-formed
+        run: python -c "from xml.dom import minidom; minidom.parse('examples/london-to-margate-tacos.gpx')"

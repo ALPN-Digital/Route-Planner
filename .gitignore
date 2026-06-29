@@ -4,14 +4,24 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
-.pytest_cache/
 
-# Generated / local route data
-*.geocoded.json
-stops.local.*
+# Rider profile and local data (never commit a personal profile)
+.route-planner/
+*rider-profile.json
 
-# Editor / OS
-.vscode/
-.idea/
+# Generated routes
+*.gpx
+!examples/*.gpx
+
+# OS / editor
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/
+
+# Build artefacts
+dist/
+
+# Claude Code session state
+.claude/
+__pycache__/

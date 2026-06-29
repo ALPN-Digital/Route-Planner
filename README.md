@@ -1,134 +1,67 @@
-# Route Planner — a Claude Skill
+# Route Planner (a Claude skill)
 
-A ready-to-use [Claude Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview)
-that turns a pile of addresses into an **optimized multi-stop route** with a shareable
-Google Maps link. Drop it into Claude Code, claude.ai, or Claude Cowork and ask Claude
-to plan a route — it does the geocoding and the route optimization for you.
+An expert, multi-activity route planner for Claude. Ask it for a ride, run, hike, walk or paddle in plain English and it plans a scenic, low-traffic route, sizes the effort to your own fitness from Strava, checks the weather for the day, and hands back a GPX you can load straight onto your device.
 
-It also doubles as a **template**: clone it, tweak `route-planner/SKILL.md`, and you
-have your own route-planning skill for your own Claude.
+It works for cycling (road, gravel, MTB, e-bike), running, hiking, walking, and water sports (paddleboard, kayak, swim, freedive approaches), anywhere in the world.
 
-```
-You:    Plan the most efficient round trip from my office to these 6 client addresses.
-Claude: (runs the skill) → ordered stops, total distance, and a Google Maps link.
-```
+## What makes it different
 
-## What's inside
+- **Scenic and quiet by default.** It favours country lanes, coast, woodland and cycleways, and actively avoids busy roads and the cycle-paths-beside-motorways trap.
+- **Your pace, not a generic one.** It reads your Strava history to estimate time for the activity.
+- **It learns your preferences.** On first use it draws on what Claude already knows about you and runs a short quiz (hills or flat, coffee stops, scenery you like, traffic tolerance), then remembers it.
+- **Weather-aware.** It checks the forecast for the day you are going, including wind and waves for water sports.
+- **GPX out.** Valid GPX with your pace baked into the timestamps, ready for Garmin, Wahoo, Suunto, Komoot and the rest.
 
-| Path | What it is |
-| --- | --- |
-| `route-planner/SKILL.md` | The skill definition Claude reads (frontmatter + instructions). |
-| `route-planner/scripts/optimize_route.py` | Route optimizer — exact for ≤12 stops, nearest-neighbor + 2-opt + Or-opt heuristic beyond. Standard library only. |
-| `route-planner/scripts/geocode.py` | Turns addresses into coordinates via free OpenStreetMap Nominatim. No API key. |
-| `route-planner/references/algorithm.md` | How the optimizer works and how to extend it. |
-| `route-planner/examples/` | Sample JSON and CSV stop lists. |
+## Quick start
 
-No dependencies. No API keys. Python 3.9+ is the only requirement, and routing works
-fully offline once stops have coordinates.
+1. Install the skill (see below).
+2. Connect Strava and, optionally, add a free routing key. Full walkthrough in **[ONBOARDING.md](ONBOARDING.md)**.
+3. Ask Claude something like:
+   - "Plan me a 100 km scenic cycle loop from home on Saturday, with a couple of options."
+   - "Route me a quiet 15 km trail run near Box Hill."
+   - "Paddle to the wind farm off West Worthing and back."
 
-## Install it
+On the first request it will set up your rider profile, then build the route. More examples in [examples/PROMPTS.md](examples/PROMPTS.md).
 
-### Option A — let Claude do it (easiest)
+## Installing the skill
 
-Paste this into **Claude Code**, **claude.ai**, or **Cowork**:
+Full instructions for every surface are in **[INSTALL.md](INSTALL.md)**. The short version:
 
-> Install the route-planner skill from https://github.com/ALPN-Digital/Route-Planner
-> — clone it and add the `route-planner/` folder to my skills, then plan me a route.
+- **Let Claude do it.** In Claude Code or Cowork, paste: *"Install the route-planner skill from this repo, then help me connect Strava and add a routing key."* Claude reads the repo (see [CLAUDE.md](CLAUDE.md)) and installs it.
+- **Claude Code (manual):** clone the repo and copy the `route-planner/` folder into `~/.claude/skills/route-planner`, then start a new session.
+- **Claude apps (web, desktop, mobile):** download `route-planner.skill` from this repo and upload it under Settings, Capabilities, Skills.
 
-### Option B — Claude Code (manual)
+## What you need
 
-Copy the skill into your project or personal skills directory:
+Nothing is strictly required to get a route, but a couple of free add-ons make it much better. The one-time setup is in **[ONBOARDING.md](ONBOARDING.md)**. In short:
 
-```bash
-git clone https://github.com/ALPN-Digital/Route-Planner.git
-mkdir -p ~/.claude/skills
-cp -r Route-Planner/route-planner ~/.claude/skills/route-planner
-```
+| Thing | Needed? | Cost | Why |
+|---|---|---|---|
+| OpenRouteService key | Optional | Free | Sharpest control over avoiding busy roads. Without it, routing uses BRouter (no key). |
+| Strava connection | Recommended | Free | Personal pace and preferences. Without it, sensible defaults are used. |
+| Weather (Open-Meteo) | Built in | Free | No key needed. |
+| Maps/geocoding (OpenStreetMap) | Built in | Free | No key needed. |
+| Suunto / Strava upload | Roadmap | Free | Direct route upload to your device/account. For now the output is a GPX file you import yourself. |
 
-Use `.claude/skills/` inside a project to scope it to that project instead.
-Restart Claude Code and ask it to plan a route — it auto-discovers the skill.
+## How it works (under the hood)
 
-### Option C — claude.ai (Skills)
+- **Routing:** OpenRouteService when a key is present, otherwise BRouter (both produce GPX; BRouter also gives genuinely different alternatives for "give me options" requests).
+- **Weather:** Open-Meteo land and marine forecasts.
+- **Geocoding:** OpenStreetMap Nominatim.
+- **Personalisation:** a stored rider profile plus Strava and Claude's memory of you.
 
-1. Download this repo as a ZIP (green **Code** button → **Download ZIP**), or zip the
-   `route-planner/` folder yourself.
-2. In claude.ai go to **Settings → Capabilities → Skills** and upload the
-   `route-planner` folder/zip (requires a plan with Skills enabled).
+See the `route-planner/references/` files for the full design.
 
-## Use it directly (no Claude needed)
+## Privacy
 
-The scripts are useful on their own.
+Your rider profile is stored locally as JSON (see `scripts/profile.py`). The skill uses Claude's memory of you only to pre-fill preferences and applies it lightly. You can skip the quiz, correct anything, or clear your profile at any time.
 
-```bash
-cd route-planner
+## Roadmap
 
-# 1) Already have coordinates? Optimize straight away:
-python3 scripts/optimize_route.py examples/stops.example.json --start Warehouse --round-trip
+- Direct upload to Strava and Suunto (currently GPX export).
+- Tide windows for coastal water sports.
+- Saved favourite routes and home locations.
 
-# 2) Only have addresses? Geocode first, then optimize (one pipeline):
-python3 scripts/geocode.py examples/stops.example.csv --format csv \
-  | python3 scripts/optimize_route.py --format json
-```
+## Licence
 
-Example output:
-
-```
-Optimized route:
-  1. Warehouse
-  2. Statue of Liberty
-  3. Brooklyn Bridge
-  4. Empire State
-  5. Central Park
-  6. Times Square
-  7. Warehouse (return)
-
-Total distance: 26.162 km (16.256 mi)
-Google Maps:    https://www.google.com/maps/dir/40.7128,-74.006/...
-```
-
-### Input format
-
-JSON (a list, or `{ "stops": [...] }`) or CSV with a header row:
-
-```json
-{ "stops": [
-    { "name": "Warehouse", "lat": 40.7128, "lon": -74.0060 },
-    { "name": "Client A",  "address": "11 Wall St, New York, NY" }
-] }
-```
-
-Each stop needs either `lat` + `lon`, or an `address` to geocode. `name` is optional.
-
-### Optimizer flags
-
-| Flag | Effect |
-| --- | --- |
-| `--start "Name"` | Pin the first stop (depot / home / current location). |
-| `--end "Name"` | Pin the last stop. |
-| `--round-trip` | Return to the start at the end. |
-| `--json-out` | Emit machine-readable JSON instead of the summary. |
-| `--format json\|csv` | Force the input format (auto-detected from file extension otherwise). |
-
-## Make it your own
-
-This repo is meant to be forked. To build your own variant:
-
-1. Edit `route-planner/SKILL.md` — the `description` is what tells Claude *when* to
-   use the skill, so make it match your use case (deliveries, field service, sales, …).
-2. Swap the distance function in `optimize_route.py` for a routing API if you need real
-   drive times (see `references/algorithm.md`).
-3. Commit, push, and share your repo link — others can install it the same way.
-
-## How good is the routing?
-
-For 12 stops or fewer the optimizer is **exact** (Held-Karp dynamic programming) — it
-returns the provably shortest tour. Beyond that it switches to a near-optimal
-heuristic (nearest-neighbor + 2-opt + Or-opt with multi-start) that stays within a few
-percent and handles ~100 stops in a few seconds.
-Distances are great-circle (straight-line) estimates; the *order* is what's optimized.
-For exact drive times, feed the optimized order into a routing API. Details in
-[`route-planner/references/algorithm.md`](route-planner/references/algorithm.md).
-
-## License
-
-[MIT](LICENSE) — use it, fork it, ship it.
+MIT. See [LICENSE](LICENSE).
