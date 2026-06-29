@@ -62,6 +62,16 @@ Map the activity to the right engine profile using `references/activities.md`.
    - **Inspect every result.** If the line darts into a place and back along nearly the same road, that via is wrong: remove it and re-route. Popular does not always mean scenic or quiet, so weigh it. Prefer adding distance over a busy stretch, but never accept a pointless spur. If a distance/duration was given, tune via-points and loop size until the routed distance lands within ~5%. Build the loop outward then back, or extend an out-and-back turnaround, as needed.
 4. **Generate options when open-ended.** For BRouter, request alternatives (`--alternatives 3`) to get genuinely different lines. Present each as a short pitch (distance, climb, character) and let the user choose before the final GPX. For a fixed destination, one well-shaped route is fine.
 
+### Multiple destinations to visit (ordering)
+
+When the user wants to visit several specific places and the order is up to you ("a loop taking in these 6 cafes", "errands hitting all these shops", "ride past these viewpoints"), work out the best order *before* routing:
+
+1. Geocode each place (`scripts/geo.py`).
+2. Order them with `scripts/optimize_stops.py --stops "lat,lon,Name; ..."`, adding `--start`/`--end` to pin a depot/home and `--round-trip` for a loop. It returns the shortest visiting order (exact for ≤12 stops) plus a ready-to-use `points` string and a `named_stops` string.
+3. Pass its `points` to `route.py --points` to route the real scenic line through them in that order, and its `named_stops` to `route.py --stops` so each is a named, confirmed waypoint. This optimizes order by straight-line distance only — the routing engine still shapes the actual roads. Confirm the stops with the user (Step 3.5) before baking them in.
+
+For a single start→destination route, skip this; it is only for "visit all of these".
+
 ## Step 3.5 — Stops (propose, name, confirm)
 
 Stops are a planning decision, not a side effect. Decide them deliberately and put the user in control.

@@ -21,3 +21,7 @@ Thumbs.db
 
 # Build artefacts
 dist/
+
+# Claude Code session state
+.claude/
+__pycache__/

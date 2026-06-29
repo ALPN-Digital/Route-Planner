@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile all scripts (stdlib only, no dependencies)
+        run: python -m compileall -q route-planner/scripts
+      - name: Run the offline test suite
+        working-directory: route-planner
+        run: python -m unittest discover -s tests -v
+      - name: GPX writer self-test
+        working-directory: route-planner
+        run: python scripts/gpx.py
+      - name: Validate the bundled example GPX is well-formed
+        run: python -c "from xml.dom import minidom; minidom.parse('examples/london-to-margate-tacos.gpx')"
