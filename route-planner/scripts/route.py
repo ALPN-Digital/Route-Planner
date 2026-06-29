@@ -24,6 +24,7 @@ Prints a JSON summary (distance, climb, engine, time) to stdout.
 import os
 import sys
 import json
+import math
 import argparse
 import urllib.request
 import urllib.error
@@ -34,7 +35,8 @@ from gpx import write_gpx  # noqa: E402
 # OpenRouteService key. Optional: leave the placeholder and the skill uses
 # BRouter (no key needed). To enable ORS routing, either paste your free key
 # below (get one at https://openrouteservice.org/dev/#/signup) or set an
-# ORS_API_KEY environment variable, which takes precedence.
+# ORS_API_KEY environment variable, which takes precedence. Never commit a real
+# key to a public repo.
 PLACEHOLDER_ORS_KEY = "YOUR_OPENROUTESERVICE_API_KEY"
 EMBEDDED_ORS_API_KEY = PLACEHOLDER_ORS_KEY
 ORS_API_KEY = os.environ.get("ORS_API_KEY") or EMBEDDED_ORS_API_KEY
@@ -42,7 +44,6 @@ ORS_API_KEY = os.environ.get("ORS_API_KEY") or EMBEDDED_ORS_API_KEY
 
 def _have_ors_key():
     return bool(ORS_API_KEY) and ORS_API_KEY != PLACEHOLDER_ORS_KEY
-
 
 # Friendly activity -> (ORS profile, BRouter profile)
 ACTIVITY_MAP = {
@@ -145,6 +146,91 @@ def choose_engine(explicit, alternatives):
     return "ors" if _have_ors_key() else "brouter"
 
 
+def _haversine_km(a, b):
+    R = 6371.0088
+    lat1, lon1, lat2, lon2 = map(math.radians, (a[0], a[1], b[0], b[1]))
+    h = (math.sin((lat2 - lat1) / 2) ** 2
+         + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2)
+    return 2 * R * math.asin(min(1.0, math.sqrt(h)))
+
+
+def _retrace_report(track, cell_m=150.0, min_spur_km=0.8, suppress_km=3.0):
+    """Detect where a route doubles back on itself.
+
+    Snaps the track to a ~cell_m grid and finds points that re-enter a cell
+    visited earlier. Each retrace is classified by how soon it happens:
+      - a TIGHT spur (re-enters within ~15% of the track later) = an out-and-back
+        poke, e.g. a via-point pinned on a dead-end lane (golden rule 8);
+      - a STRUCTURAL retrace (re-enters much later) = the return half of a
+        deliberate out-and-back, which is fine.
+
+    Returns:
+      retrace_pct          - % of total distance that re-covers earlier ground
+                             (~0 clean loop, ~50 pure out-and-back).
+      dead_end_spurs       - list of tight pokes (tip lat/lon + round-trip km),
+                             EXCLUDING the unavoidable streets within suppress_km
+                             of start/finish. One spur usually = your single
+                             intended turnaround; TWO OR MORE = stray dead-end
+                             vias to remove and re-route.
+    """
+    if len(track) < 4:
+        return {"retrace_pct": 0.0, "dead_end_spurs": []}
+    n = len(track)
+    local_window = max(60, int(0.15 * n))
+    lat0 = track[n // 2][0]
+    dlat = cell_m / 111320.0
+    dlon = cell_m / (111320.0 * max(0.15, math.cos(math.radians(lat0))))
+
+    def cell(p):
+        return (int(round(p[0] / dlat)), int(round(p[1] / dlon)))
+
+    start, end = track[0], track[-1]
+    first_seen = {}
+    tight = [False] * n          # retrace with small index gap (a poke)
+    any_retrace = [False] * n
+    for i, p in enumerate(track):
+        c = cell(p)
+        if c in first_seen:
+            gap = i - first_seen[c]
+            if gap > 15:
+                any_retrace[i] = True
+                near_home = (_haversine_km(p, start) < suppress_km
+                             or _haversine_km(p, end) < suppress_km)
+                if gap <= local_window and not near_home:
+                    tight[i] = True
+        else:
+            first_seen[c] = i
+
+    seglen = [0.0] * n
+    total = retrace_km = 0.0
+    for i in range(1, n):
+        d = _haversine_km(track[i - 1], track[i])
+        seglen[i] = d
+        total += d
+        if any_retrace[i] and any_retrace[i - 1]:
+            retrace_km += d
+
+    spurs = []
+    i = 1
+    while i < n:
+        if tight[i] and tight[i - 1]:
+            j = i
+            run_km = 0.0
+            while j < n and tight[j] and tight[j - 1]:
+                run_km += seglen[j]
+                j += 1
+            if run_km >= min_spur_km:
+                tip = track[(i + j) // 2]
+                spurs.append({"lat": round(tip[0], 5), "lon": round(tip[1], 5),
+                              "roundtrip_km": round(run_km, 2)})
+            i = j
+        else:
+            i += 1
+
+    return {"retrace_pct": round(100 * retrace_km / total, 1) if total else 0.0,
+            "dead_end_spurs": spurs}
+
+
 def plan(activity, points, name, out, speed_kmh=None, start=None,
          avoid=None, alternatives=1, description=None, engine="auto",
          stops=None, label_vias=False, start_name="Start", finish_name="Finish"):
@@ -164,6 +250,7 @@ def plan(activity, points, name, out, speed_kmh=None, start=None,
                               activity=activity, waypoints=wpts,
                               speed_kmh=speed_kmh, start_iso=start, description=description)
             stats.update(meta)
+            stats.update(_retrace_report(pts))
             results.append(stats)
     else:  # ORS, single shaped route
         pts, meta = _ors(ors_prof, points, avoid)
@@ -172,6 +259,7 @@ def plan(activity, points, name, out, speed_kmh=None, start=None,
         stats = write_gpx(pts, out, name=name, activity=activity, waypoints=wpts,
                           speed_kmh=speed_kmh, start_iso=start, description=description)
         stats.update(meta)
+        stats.update(_retrace_report(pts))
         results.append(stats)
     return results
 
@@ -232,6 +320,14 @@ def _main():
                description=a.desc, engine=a.engine, stops=stops,
                label_vias=a.label_vias, start_name=a.start_name, finish_name=a.finish_name)
     print(json.dumps(res, indent=2))
+    for r in res:
+        spurs = r.get("dead_end_spurs", [])
+        if len(spurs) > 1:
+            tips = "; ".join(f"~{s['roundtrip_km']}km @ {s['lat']},{s['lon']}" for s in spurs)
+            sys.stderr.write(
+                f"WARNING: {len(spurs)} dead-end spurs detected ({tips}). "
+                "More than one turnaround usually means a via-point is pinned on a "
+                "dead-end lane (golden rule 8) - remove it and re-route.\n")
 
 
 if __name__ == "__main__":
