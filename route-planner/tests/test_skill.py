@@ -110,9 +110,28 @@ class TestRoute(unittest.TestCase):
     def test_choose_engine(self):
         self.assertEqual(route.choose_engine("brouter", 1), "brouter")
         self.assertEqual(route.choose_engine("auto", 3), "brouter")  # alternatives -> brouter
-        # With no ORS key configured (CI default), auto falls back to brouter.
+        # auto picks ORS when a real key is configured, else BRouter.
         self.assertEqual(route.choose_engine("auto", 1),
                          "ors" if route._have_ors_key() else "brouter")
+
+    def test_retrace_report_clean_line_has_no_spurs(self):
+        # A straight, monotonic line never re-covers ground.
+        track = [(51.5, -0.1 + i * 0.001) for i in range(60)]
+        rep = route._retrace_report(track)
+        self.assertEqual(rep["retrace_pct"], 0.0)
+        self.assertEqual(rep["dead_end_spurs"], [])
+
+    def test_retrace_report_out_and_back_is_high(self):
+        # Out then back over the same line re-covers most of the distance.
+        out = [(51.5, -0.1 + i * 0.001) for i in range(60)]
+        track = out + list(reversed(out[:-1]))
+        rep = route._retrace_report(track)
+        self.assertGreater(rep["retrace_pct"], 20.0)
+        self.assertIn("dead_end_spurs", rep)
+
+    def test_retrace_report_handles_short_track(self):
+        self.assertEqual(route._retrace_report([(51.5, -0.1), (51.5, -0.09)]),
+                         {"retrace_pct": 0.0, "dead_end_spurs": []})
 
     def test_activity_map_has_core_activities(self):
         for act in ("cycling-road", "running", "hiking", "cycling-gravel"):
